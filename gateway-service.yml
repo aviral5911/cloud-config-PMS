@@ -1,0 +1,63 @@
+eureka:
+  instance:
+    preferIpAddress: true
+  client:
+    fetchRegistry: true
+    registerWithEureka: true
+    serviceUrl:
+      defaultZone: http://eureka:8070/eureka/
+
+management:
+  endpoint:
+    gateway:
+      enabled: true
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+
+spring:
+  cloud:
+    gateway:
+      server:
+        webflux:
+          discovery:
+            locator:
+              enabled: false
+
+          routes:
+            - id: patient-route
+              uri: lb://PATIENT-SERVICE
+              predicates:
+                - Path=/patient,/patient/**
+              filters:
+                - JwtValidation
+                - ResponseTime
+                - name: CircuitBreaker
+                  args:
+                    name: patientServiceCB
+                    fallbackUri: forward:/fallback/patients
+
+            - id: auth-service-route
+              uri: http://auth-service:4005
+              predicates:
+                - Path=/auth/**
+              filters:
+                - StripPrefix=1
+
+            - id: billing-route
+              uri: lb://BILLING-SERVICE
+              predicates:
+                - Path=/billing/**
+              filters:
+                - StripPrefix=1
+                - JwtValidation
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      patientServiceCB:
+        slidingWindowSize: 10
+        failureRateThreshold: 50
+        waitDurationInOpenState: 10s
+        permittedNumberOfCallsInHalfOpenState: 3
